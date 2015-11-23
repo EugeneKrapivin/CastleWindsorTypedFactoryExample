@@ -7,6 +7,7 @@ using Castle.Windsor.Installer;
 
 namespace TypedFactoryWindsor
 {
+
     #region interfaces and base implementations
     public interface IBase
     {
@@ -21,13 +22,25 @@ namespace TypedFactoryWindsor
     public interface IExtTwo : IBase
     {
     }
+
+    public interface ISomeConstructorDependency
+    {
+
+    }
+
+    public class SomeConstructorDependency : ISomeConstructorDependency
+    {
+
+    }
+    
+
     #endregion
 
     #region typed-factory interface - no implementation is required https://github.com/castleproject/Windsor/blob/master/docs/typed-factory-facility-interface-based.md
     public interface IExtFactory : IDisposable
     {
-        IExtOne CreatExtOne();
-        IExtTwo CreatExtTwo();
+        IExtOne CreatExtOne(string message);
+        IExtTwo CreatExtTwo(string message);
         void Destroy(IBase ext);
     }
     #endregion
@@ -35,17 +48,37 @@ namespace TypedFactoryWindsor
     #region implementation of marker interfaces
     public class ExtOne : IExtOne
     {
+        private readonly ISomeConstructorDependency _someConstructorDependency;
+        private readonly string _message;
+
+        public ExtOne(ISomeConstructorDependency someConstructorDependency, string message)
+        {
+            if (someConstructorDependency == null) throw new ArgumentNullException("someConstructorDependency");
+            _someConstructorDependency = someConstructorDependency;
+            _message = message;
+        }
+
         public string MyMessage()
         {
-            return "one";
+            return "ONE:" + _message;
         }
     }
 
     public class ExtTwo : IExtTwo
     {
+        private readonly ISomeConstructorDependency _someConstructorDependency;
+        private readonly string _message;
+       
+        public ExtTwo(ISomeConstructorDependency someConstructorDependency, string message)
+        {
+            if (someConstructorDependency == null) throw new ArgumentNullException("someConstructorDependency");
+            _someConstructorDependency = someConstructorDependency;
+            _message = message;
+        }
+
         public string MyMessage()
         {
-            return "two";
+            return "TWO:" + _message;
         }
     }
 
@@ -74,10 +107,10 @@ namespace TypedFactoryWindsor
 
         public void DoWork()
         {
-            IBase ext = _factory.CreatExtOne();
+            IBase ext = _factory.CreatExtOne("one message");
             Console.WriteLine(ext.MyMessage());
 
-            ext = _factory.CreatExtTwo();
+            ext = _factory.CreatExtTwo("two message");
             Console.WriteLine(ext.MyMessage());
         }
 
@@ -97,7 +130,7 @@ namespace TypedFactoryWindsor
         #region Windsor container registrations
         private static IWindsorContainer Register()
         {
-            var container = new WindsorContainer(); // create a new container
+            var container = new WindsorContainer(); // create SomeConstructorDependency new container
             container.AddFacility<TypedFactoryFacility>();
             container.Register(Component.For<IExtFactory>().AsFactory());
 
@@ -108,7 +141,7 @@ namespace TypedFactoryWindsor
                                         .Where(type => typeof(IBase).IsAssignableFrom(type)) 
                                         .WithServiceDefaultInterfaces()
                                         .LifestyleTransient());
-
+            container.Register(Component.For<ISomeConstructorDependency>().ImplementedBy<SomeConstructorDependency>().LifestyleTransient());
             container.Install(FromAssembly.This()); // find all installers in executing assembly and install them
 
             return container;
@@ -118,7 +151,7 @@ namespace TypedFactoryWindsor
         static void Main(string[] args)
         {
             // Generally the controller in WebAPI will be the created from the container and all dependencies passed down
-            // in a WinService the service will be spawned from the container and all dependencies passed down (TopShelf host)
+            // in SomeConstructorDependency WinService the service will be spawned from the container and all dependencies passed down (TopShelf host)
             using (var container = Register())
             {
                 var dummy = container.Resolve<DummyWork>(); // this should be the root of your application, resolve the Api/Controller or WinService
