@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using Castle.Facilities.TypedFactory;
 using Castle.MicroKernel.Registration;
 using Castle.MicroKernel.SubSystems.Configuration;
@@ -9,8 +10,10 @@ namespace TypedFactoryWindsor
 {
 
     #region interfaces and base implementations
-    public interface IBase
+    public interface IBase : IDisposable
     {
+        ISomeConstructorDependency SomeConstructorDependency { get; set; }
+        bool Disposed { get; }
         string MyMessage();
     }
 
@@ -48,13 +51,14 @@ namespace TypedFactoryWindsor
     #region implementation of marker interfaces
     public class ExtOne : IExtOne
     {
-        private readonly ISomeConstructorDependency _someConstructorDependency;
+        public ISomeConstructorDependency SomeConstructorDependency { get; set; }
         private readonly string _message;
+        public bool Disposed { get; private set; }
 
         public ExtOne(ISomeConstructorDependency someConstructorDependency, string message)
         {
             if (someConstructorDependency == null) throw new ArgumentNullException("someConstructorDependency");
-            _someConstructorDependency = someConstructorDependency;
+            SomeConstructorDependency = someConstructorDependency;
             _message = message;
         }
 
@@ -62,23 +66,44 @@ namespace TypedFactoryWindsor
         {
             return "ONE:" + _message;
         }
+
+        public void Dispose()
+        {
+            if (Disposed)
+            {
+                throw new Exception("WTF?!");
+            }
+
+            Disposed = true;
+        }
     }
 
     public class ExtTwo : IExtTwo
     {
-        private readonly ISomeConstructorDependency _someConstructorDependency;
+        public ISomeConstructorDependency SomeConstructorDependency { get; set; }
         private readonly string _message;
+        public bool Disposed { get; private set; }
        
         public ExtTwo(ISomeConstructorDependency someConstructorDependency, string message)
         {
             if (someConstructorDependency == null) throw new ArgumentNullException("someConstructorDependency");
-            _someConstructorDependency = someConstructorDependency;
+            SomeConstructorDependency = someConstructorDependency;
             _message = message;
         }
 
         public string MyMessage()
         {
             return "TWO:" + _message;
+        }
+        
+        public void Dispose()
+        {
+            if (Disposed)
+            {
+                throw new Exception("WTF?!");
+            }
+
+            Disposed = true;
         }
     }
 
@@ -107,11 +132,20 @@ namespace TypedFactoryWindsor
 
         public void DoWork()
         {
-            IBase ext = _factory.CreatExtOne("one message");
-            Console.WriteLine(ext.MyMessage());
+            IBase ext;
+            using(_factory)
+            { 
+                ext = _factory.CreatExtOne("one message");
+                Console.WriteLine(ext.MyMessage());
 
-            ext = _factory.CreatExtTwo("two message");
-            Console.WriteLine(ext.MyMessage());
+                var ext2 = _factory.CreatExtOne("two message");
+                Console.WriteLine(ext2.MyMessage());
+
+                Console.WriteLine(ext == ext2);
+                Console.WriteLine(ext.SomeConstructorDependency == ext2.SomeConstructorDependency);
+                Console.WriteLine("disposed:" + (ext.Disposed == false));
+            }
+            Console.WriteLine("disposed:" + (ext.Disposed == false));
         }
 
         // Auto install the class to the container
@@ -141,7 +175,7 @@ namespace TypedFactoryWindsor
                                         .Where(type => typeof(IBase).IsAssignableFrom(type)) 
                                         .WithServiceDefaultInterfaces()
                                         .LifestyleTransient());
-            container.Register(Component.For<ISomeConstructorDependency>().ImplementedBy<SomeConstructorDependency>().LifestyleTransient());
+            container.Register(Component.For<ISomeConstructorDependency>().ImplementedBy<SomeConstructorDependency>().LifestyleSingleton());
             container.Install(FromAssembly.This()); // find all installers in executing assembly and install them
 
             return container;
